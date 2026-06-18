@@ -16,6 +16,12 @@ export interface Rule {
   severity: Severity;
   /** The regex used to detect the pattern. Should NOT be global; matching is done per-line. */
   pattern: RegExp;
+  /**
+   * When true, the rule is matched against the whole file content rather than
+   * line-by-line, so patterns can span multiple lines. The reported line is
+   * derived from the match offset. Defaults to false.
+   */
+  multiline?: boolean;
   /** Explanation of why this pattern is risky. */
   description: string;
 }
