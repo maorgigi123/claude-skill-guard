@@ -20,6 +20,20 @@ function readVersion(): string {
   }
 }
 
+/**
+ * Write a string to stdout and resolve only once it has been fully flushed.
+ *
+ * Setting `process.exitCode` and letting the event loop drain is unreliable
+ * for large writes to a TTY: Node can exit before the buffered output (and the
+ * intended code) takes effect. Awaiting the drain first makes the exit code
+ * deterministic across TTY, pipe, and file redirection.
+ */
+function writeStdout(text: string): Promise<void> {
+  return new Promise((resolve) => {
+    process.stdout.write(text, () => resolve());
+  });
+}
+
 const program = new Command();
 
 program
@@ -36,20 +50,17 @@ program
     try {
       const result = await scan(target);
 
-      if (options.json) {
-        process.stdout.write(toJson(result) + "\n");
-      } else {
-        process.stdout.write(renderReport(result) + "\n");
-      }
+      const output = options.json
+        ? toJson(result)
+        : renderReport(result);
+      await writeStdout(output + "\n");
 
       // Exit non-zero when any critical finding exists.
-      if (result.counts.critical > 0) {
-        process.exitCode = 1;
-      }
+      process.exit(result.counts.critical > 0 ? 1 : 0);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       process.stderr.write(`skill-guard: error: ${message}\n`);
-      process.exitCode = 2;
+      process.exit(2);
     }
   });
 
