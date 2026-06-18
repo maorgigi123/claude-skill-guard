@@ -3,16 +3,29 @@
  * skill-guard CLI entry point.
  */
 
+import fs from "fs";
+import path from "path";
 import { Command } from "commander";
 import { scan } from "./scanner";
 import { renderReport, toJson } from "./reporter";
+
+/** Read the version from package.json so it can never drift from the published version. */
+function readVersion(): string {
+  try {
+    const pkgPath = path.join(__dirname, "..", "package.json");
+    const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf8"));
+    return typeof pkg.version === "string" ? pkg.version : "0.0.0";
+  } catch {
+    return "0.0.0";
+  }
+}
 
 const program = new Command();
 
 program
   .name("skill-guard")
   .description("A security scanner for Claude Skills")
-  .version("1.0.0");
+  .version(readVersion());
 
 program
   .command("scan")
