@@ -1,0 +1,50 @@
+{
+  "name": "claude-skill-guard",
+  "version": "1.0.1",
+  "description": "A security scanner for Claude Skills",
+  "license": "MIT",
+  "type": "commonjs",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/maorgigi123/claude-skill-guard.git"
+  },
+  "homepage": "https://github.com/maorgigi123/claude-skill-guard#readme",
+  "bugs": {
+    "url": "https://github.com/maorgigi123/claude-skill-guard/issues"
+  },
+  "bin": {
+    "skill-guard": "dist/cli.js"
+  },
+  "main": "dist/index.js",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc && chmod +x dist/cli.js",
+    "dev": "ts-node src/cli.ts",
+    "scan": "ts-node src/cli.ts scan",
+    "start": "node dist/cli.js",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "security",
+    "scanner",
+    "claude",
+    "skills",
+    "cli",
+    "static-analysis"
+  ],
+  "dependencies": {
+    "commander": "^12.1.0",
+    "fast-glob": "^3.3.2"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.5.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
