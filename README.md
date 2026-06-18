@@ -102,11 +102,14 @@ These directories are always ignored: `node_modules`, `dist`, `.git`.
 | `curl-pipe-bash`        | `curl ... \| bash`                       | critical |
 | `wget-pipe-sh`          | `wget ... \| sh`                         | critical |
 | `private-key`           | Private key material / `id_rsa`          | critical |
+| `encoded-exec`          | `base64 -d \| bash` decode-and-execute   | critical |
+| `reverse-shell`         | Reverse / bind shells (`/dev/tcp`, `nc -e`) | critical |
 | `sudo`                  | `sudo` privilege escalation              | high     |
 | `child-process`         | Node `child_process` import              | high     |
 | `exec-spawn`            | `exec` / `spawn` / `fork` calls          | high     |
+| `eval-exec`             | `eval` / `Invoke-Expression` / `python -c` | high   |
 | `ssh-dir`               | Access to `~/.ssh`                       | high     |
-| `prompt-injection`      | "ignore previous instructions", etc.     | high     |
+| `prompt-injection`      | "ignore previous instructions", etc. (multi-line aware) | high |
 | `chmod-exec`            | `chmod +x`                               | medium   |
 | `dotenv-file`           | References to `.env` files               | medium   |
 | `external-network-call` | External `curl`/`fetch`/`axios` requests | medium   |

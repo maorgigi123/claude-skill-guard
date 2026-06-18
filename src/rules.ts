@@ -103,9 +103,34 @@ export const rules: Rule[] = [
       "Makes an outbound network request, which could exfiltrate data or pull remote payloads.",
   },
   {
+    id: "eval-exec",
+    title: "Dynamic code execution (eval / Invoke-Expression)",
+    severity: "high",
+    pattern: /\beval\s*\(|\bnew\s+Function\s*\(|\b(?:Invoke-Expression|iex)\b|\bpython[0-9.]*\s+-c\b|\bnode\s+-e\b|\bperl\s+-e\b|\bruby\s+-e\b/i,
+    description:
+      "Executes code or a command supplied as a string, a common obfuscation and injection vector.",
+  },
+  {
+    id: "encoded-exec",
+    title: "Decode-and-execute (base64 -d | bash)",
+    severity: "critical",
+    pattern: /\bbase64\s+(?:--decode|-d|-D)\b[^\n]*\|\s*(?:ba)?sh\b|\b(?:echo|printf)\b[^\n]*\|\s*base64\s+(?:--decode|-d|-D)\b[^\n]*\|\s*(?:ba)?sh\b/,
+    description:
+      "Decodes an obfuscated (base64) payload and pipes it straight into a shell.",
+  },
+  {
+    id: "reverse-shell",
+    title: "Reverse / bind shell",
+    severity: "critical",
+    pattern: /\bnc\b[^\n]*\s-[a-z]*e[a-z]*\s|\b(?:bash|sh)\s+-i\b[^\n]*>&\s*\/dev\/tcp\/|\/dev\/tcp\/[0-9]|\bsocat\b[^\n]*\bexec\b|\bmkfifo\b[^\n]*\|\s*(?:ba)?sh\b/,
+    description:
+      "Opens an interactive shell back to a remote host — a hallmark of post-exploitation payloads.",
+  },
+  {
     id: "prompt-injection",
     title: "Prompt injection phrasing",
     severity: "high",
+    multiline: true,
     pattern: /\bignore\s+(?:all\s+)?(?:previous|prior|above|earlier|the\s+previous)\s+instructions?\b|\bdisregard\s+(?:all\s+)?(?:previous|prior|above|earlier)\b|\byou\s+are\s+now\s+(?:a|an|in)\b|\bact\s+as\s+(?:if|though)\b|\bdo\s+not\s+(?:tell|inform|reveal)\s+(?:the\s+)?(?:user|anyone)\b/i,
     description:
       "Contains language commonly used to hijack or override an AI agent's instructions.",
