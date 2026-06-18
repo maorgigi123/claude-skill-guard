@@ -42,13 +42,22 @@ const MATCH_MAX_LEN = 200;
  * with a supported extension, just that file is returned.
  */
 export async function findFiles(target: string): Promise<string[]> {
-  const stat = fs.existsSync(target) ? fs.statSync(target) : undefined;
+  if (!fs.existsSync(target)) {
+    throw new Error(`path does not exist: ${target}`);
+  }
 
-  if (stat?.isFile()) {
+  const stat = fs.statSync(target);
+
+  if (stat.isFile()) {
     return [path.resolve(target)];
   }
 
-  const root = stat?.isDirectory() ? target : path.dirname(target);
+  if (!stat.isDirectory()) {
+    // Not a regular file or directory (socket, fifo, device, …).
+    throw new Error(`path is not a file or directory: ${target}`);
+  }
+
+  const root = target;
   const extGlob = `**/*.{${SCANNED_EXTENSIONS.join(",")}}`;
 
   const entries = await fg(extGlob, {
@@ -68,27 +77,49 @@ export function scanContent(filePath: string, content: string): Finding[] {
   const findings: Finding[] = [];
   const lines = content.split(/\r?\n/);
 
+  // Line-by-line rules: most rules, scoped to a single line.
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     if (line.length === 0) continue;
 
     for (const rule of rules) {
+      if (rule.multiline) continue;
       const m = rule.pattern.exec(line);
       if (m) {
-        findings.push({
-          ruleId: rule.id,
-          title: rule.title,
-          severity: rule.severity,
-          file: filePath,
-          line: i + 1,
-          match: truncate(m[0].trim(), MATCH_MAX_LEN),
-          description: rule.description,
-        });
+        findings.push(makeFinding(rule, filePath, i + 1, m[0]));
       }
     }
   }
 
+  // Whole-content rules: patterns that may span multiple lines.
+  for (const rule of rules) {
+    if (!rule.multiline) continue;
+    const m = rule.pattern.exec(content);
+    if (m) {
+      const line = content.slice(0, m.index).split(/\r?\n/).length;
+      // Collapse internal whitespace so a multi-line match displays on one line.
+      findings.push(makeFinding(rule, filePath, line, m[0].replace(/\s+/g, " ")));
+    }
+  }
+
   return findings;
+}
+
+function makeFinding(
+  rule: { id: string; title: string; severity: Finding["severity"]; description: string },
+  file: string,
+  line: number,
+  match: string,
+): Finding {
+  return {
+    ruleId: rule.id,
+    title: rule.title,
+    severity: rule.severity,
+    file,
+    line,
+    match: truncate(match.trim(), MATCH_MAX_LEN),
+    description: rule.description,
+  };
 }
 
 /**
