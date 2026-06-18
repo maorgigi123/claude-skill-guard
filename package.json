@@ -1,6 +1,6 @@
 {
   "name": "claude-skill-guard",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "A security scanner for Claude Skills",
   "license": "MIT",
   "type": "commonjs",
