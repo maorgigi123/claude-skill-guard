@@ -46,7 +46,7 @@ export interface Finding {
  * Aggregated result of a scan over a path.
  */
 export interface ScanResult {
-  /** Root path that was scanned. */
+  /** Root path that was scanned. When multiple paths were scanned, this is a comma-separated list. */
   path: string;
   /** Number of files that were read and scanned. */
   filesScanned: number;

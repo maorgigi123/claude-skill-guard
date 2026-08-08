@@ -42,8 +42,10 @@ npm run scan -- <path> --json
 ## Usage
 
 ```bash
-skill-guard scan <path>
-skill-guard scan <path> --json
+skill-guard scan <path...>
+skill-guard scan <path...> --json
+skill-guard scan <path...> --severity <low|medium|high|critical>
+skill-guard scan <path...> --fail-on <low|medium|high|critical>
 ```
 
 ### Examples
@@ -64,6 +66,24 @@ Scan a single file:
 
 ```bash
 skill-guard scan ./my-skill/SKILL.md
+```
+
+Scan multiple paths in one invocation:
+
+```bash
+skill-guard scan ./my-skill ./another-skill
+```
+
+Only report medium-severity findings and above:
+
+```bash
+skill-guard scan ./my-skill --severity medium
+```
+
+Fail the command (exit code 1) on high severity or worse, not just critical:
+
+```bash
+skill-guard scan ./my-skill --fail-on high
 ```
 
 ### Sample output
@@ -114,6 +134,10 @@ These directories are always ignored: `node_modules`, `dist`, `.git`.
 | `dotenv-file`           | References to `.env` files               | medium   |
 | `external-network-call` | External `curl`/`fetch`/`axios` requests | medium   |
 | `process-env`           | `process.env` access                     | low      |
+| `powershell-download-cradle` | PowerShell download-and-execute cradle | critical |
+| `npm-install-run`       | Install a package and immediately run it | high     |
+| `secret-exfil-print`    | Secret file read piped to a network command | high  |
+| `crypto-miner`          | Cryptocurrency miner references          | high     |
 
 ## Output
 
@@ -144,16 +168,22 @@ A score from **0 to 10** summarizes overall risk:
 
 ### Exit codes
 
-| Code | Meaning                          |
-| ---- | -------------------------------- |
-| `0`  | Scan completed, no critical hits |
-| `1`  | At least one **critical** finding |
-| `2`  | Scanner error                    |
+| Code | Meaning                                             |
+| ---- | ---------------------------------------------------- |
+| `0`  | Scan completed, no finding at or above `--fail-on`    |
+| `1`  | At least one finding at or above the `--fail-on` threshold (default: **critical**) |
+| `2`  | Scanner error, or an invalid `--fail-on`/`--severity` value |
 
 This makes `skill-guard` easy to gate a CI pipeline on:
 
 ```bash
 skill-guard scan ./skills || echo "Critical security findings detected!"
+```
+
+Or tighten the gate to fail on high severity or worse:
+
+```bash
+skill-guard scan ./skills --fail-on high
 ```
 
 ## Programmatic API

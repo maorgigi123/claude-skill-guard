@@ -6,8 +6,15 @@
 import fs from "fs";
 import path from "path";
 import { Command } from "commander";
-import { scan } from "./scanner";
+import { scanMany, filterBySeverity, countBySeverity, computeRiskScore } from "./scanner";
 import { renderReport, toJson } from "./reporter";
+import { Severity } from "./types";
+
+const SEVERITIES: Severity[] = ["low", "medium", "high", "critical"];
+
+function isSeverity(value: string): value is Severity {
+  return (SEVERITIES as string[]).includes(value);
+}
 
 /** Read the version from package.json so it can never drift from the published version. */
 function readVersion(): string {
@@ -43,20 +50,55 @@ program
 
 program
   .command("scan")
-  .description("Scan a file or directory for risky patterns")
-  .argument("<path>", "file or directory to scan")
+  .description("Scan one or more files or directories for risky patterns")
+  .argument("<paths...>", "files or directories to scan")
   .option("--json", "output findings as JSON")
-  .action(async (target: string, options: { json?: boolean }) => {
+  .option(
+    "--fail-on <severity>",
+    "minimum severity that causes a non-zero exit code (low|medium|high|critical)",
+    "critical",
+  )
+  .option(
+    "--severity <severity>",
+    "only report findings at or above this severity (low|medium|high|critical)",
+  )
+  .action(async (targets: string[], options: { json?: boolean; failOn: string; severity?: string }) => {
     try {
-      const result = await scan(target);
+      if (!isSeverity(options.failOn)) {
+        throw new Error(
+          `invalid --fail-on value "${options.failOn}" (expected one of: ${SEVERITIES.join(", ")})`,
+        );
+      }
+      if (options.severity !== undefined && !isSeverity(options.severity)) {
+        throw new Error(
+          `invalid --severity value "${options.severity}" (expected one of: ${SEVERITIES.join(", ")})`,
+        );
+      }
+
+      let result = await scanMany(targets);
+
+      if (options.severity !== undefined) {
+        const findings = filterBySeverity(result.findings, options.severity);
+        result = {
+          ...result,
+          findings,
+          counts: countBySeverity(findings),
+          riskScore: computeRiskScore(countBySeverity(findings)),
+        };
+      }
 
       const output = options.json
         ? toJson(result)
         : renderReport(result);
       await writeStdout(output + "\n");
 
-      // Exit non-zero when any critical finding exists.
-      process.exit(result.counts.critical > 0 ? 1 : 0);
+      // Exit non-zero when any finding meets or exceeds the --fail-on threshold.
+      const failThreshold = SEVERITIES.indexOf(options.failOn);
+      const worstFound = SEVERITIES.reduce(
+        (worst, sev, i) => (result.counts[sev] > 0 ? Math.max(worst, i) : worst),
+        -1,
+      );
+      process.exit(worstFound >= failThreshold ? 1 : 0);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       process.stderr.write(`skill-guard: error: ${message}\n`);

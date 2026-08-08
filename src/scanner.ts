@@ -154,6 +154,44 @@ export async function scan(target: string): Promise<ScanResult> {
   };
 }
 
+/** Severity ranks, low to high, used for threshold comparisons. */
+const SEVERITY_RANK: Record<Severity, number> = {
+  low: 0,
+  medium: 1,
+  high: 2,
+  critical: 3,
+};
+
+/**
+ * Scan multiple paths and merge the results into a single ScanResult.
+ */
+export async function scanMany(targets: string[]): Promise<ScanResult> {
+  if (targets.length === 1) return scan(targets[0]);
+
+  const results = await Promise.all(targets.map((t) => scan(t)));
+
+  const findings = results.flatMap((r) => r.findings);
+  findings.sort((a, b) => (a.file === b.file ? a.line - b.line : a.file < b.file ? -1 : 1));
+
+  const filesScanned = results.reduce((sum, r) => sum + r.filesScanned, 0);
+  const counts = countBySeverity(findings);
+  const riskScore = computeRiskScore(counts);
+
+  return {
+    path: targets.join(", "),
+    filesScanned,
+    findings,
+    counts,
+    riskScore,
+  };
+}
+
+/** Keep only findings at or above the given minimum severity. */
+export function filterBySeverity(findings: Finding[], minSeverity: Severity): Finding[] {
+  const min = SEVERITY_RANK[minSeverity];
+  return findings.filter((f) => SEVERITY_RANK[f.severity] >= min);
+}
+
 /** Tally findings by severity. */
 export function countBySeverity(findings: Finding[]): Record<Severity, number> {
   const counts: Record<Severity, number> = {

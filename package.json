@@ -1,8 +1,9 @@
 {
   "name": "claude-skill-guard",
-  "version": "1.0.3",
+  "version": "1.1.0",
   "description": "A security scanner for Claude Skills",
   "license": "MIT",
+  "author": "maor gigi",
   "type": "commonjs",
   "repository": {
     "type": "git",
@@ -19,7 +20,8 @@
   "types": "dist/index.d.ts",
   "files": [
     "dist",
-    "README.md"
+    "README.md",
+    "LICENSE"
   ],
   "scripts": {
     "build": "tsc && chmod +x dist/cli.js",

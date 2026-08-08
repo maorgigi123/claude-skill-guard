@@ -57,7 +57,9 @@ export function toJson(result: ScanResult): string {
 /** Render a full terminal report for a scan result. */
 export function renderReport(result: ScanResult): string {
   const out: string[] = [];
-  const root = path.resolve(result.path);
+  // Multiple scanned paths are joined with ", " and can't be resolved as a
+  // single root, so fall back to the CWD for relativizing file paths.
+  const root = result.path.includes(", ") ? process.cwd() : path.resolve(result.path);
 
   out.push("");
   out.push(c.bold(c.cyan("  skill-guard")) + c.dim("  security scan"));

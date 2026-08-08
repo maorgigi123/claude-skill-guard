@@ -135,6 +135,38 @@ export const rules: Rule[] = [
     description:
       "Contains language commonly used to hijack or override an AI agent's instructions.",
   },
+  {
+    id: "powershell-download-cradle",
+    title: "PowerShell download cradle",
+    severity: "critical",
+    pattern: /\bIEX\b[^\n]*(?:New-Object\s+Net\.WebClient|DownloadString|DownloadFile)|(?:New-Object\s+Net\.WebClient|DownloadString|DownloadFile)[^\n]*\|\s*IEX\b|\bInvoke-WebRequest\b[^\n]*\|\s*(?:IEX|Invoke-Expression)\b|\bInvoke-Expression\b[^\n]*(?:DownloadString|WebClient)/i,
+    description:
+      "Downloads a remote script and executes it in-memory via PowerShell. A common Windows remote code execution vector.",
+  },
+  {
+    id: "npm-install-run",
+    title: "Install-and-run of a package",
+    severity: "high",
+    pattern: /\b(?:npm|yarn|pnpm)\s+(?:install|add|i)\b[^\n&|]*(?:&&|;)\s*(?:node|npx)\b|\bpip[0-9]*\s+install\b[^\n&|]*(?:&&|;)\s*python[0-9.]*\b/,
+    description:
+      "Installs a package and immediately executes it, giving an untrusted or unpinned dependency a path to run arbitrary code.",
+  },
+  {
+    id: "secret-exfil-print",
+    title: "Secret file read piped to network command",
+    severity: "high",
+    pattern: /\b(?:cat|type|more|less)\s+[^\n|]*(?:\.env(?:\.[a-zA-Z0-9_-]+)?|\.ssh\/[^\s]*|id_(?:rsa|dsa|ecdsa|ed25519)|\.aws\/credentials|\.npmrc)\b[^\n]*\|\s*(?:curl|wget|nc|ncat|netcat)\b|\b(?:env|printenv|set)\s*\|\s*(?:curl|wget|nc|ncat|netcat)\b/,
+    description:
+      "Reads secret material (env files, SSH keys, credentials) and pipes it directly into a network command — a data exfiltration pattern.",
+  },
+  {
+    id: "crypto-miner",
+    title: "Cryptocurrency miner",
+    severity: "high",
+    pattern: /\bxmrig\b|\bstratum\+tcp:\/\/|\bstratum\+ssl:\/\/|--donate-level\b|\bminerd\b|\bcpuminer\b|\bethminer\b/i,
+    description:
+      "References cryptocurrency mining software or a mining pool protocol, often dropped and run silently to steal compute resources.",
+  },
 ];
 
 /** Look up a rule by its id. */
