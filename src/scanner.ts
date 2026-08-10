@@ -40,8 +40,11 @@ const MATCH_MAX_LEN = 200;
 /**
  * Discover all scannable files under a path. If the path is a single file
  * with a supported extension, just that file is returned.
+ *
+ * @param ignorePaths Extra glob patterns (relative to `target`) to exclude,
+ *   on top of the always-ignored `IGNORED_DIRS`.
  */
-export async function findFiles(target: string): Promise<string[]> {
+export async function findFiles(target: string, ignorePaths: string[] = []): Promise<string[]> {
   if (!fs.existsSync(target)) {
     throw new Error(`path does not exist: ${target}`);
   }
@@ -66,37 +69,71 @@ export async function findFiles(target: string): Promise<string[]> {
     dot: true,
     onlyFiles: true,
     followSymbolicLinks: false,
-    ignore: IGNORED_DIRS.map((d) => `**/${d}/**`),
+    ignore: [...IGNORED_DIRS.map((d) => `**/${d}/**`), ...ignorePaths],
   });
 
   return entries;
 }
 
-/** Run all rules against a single file's content. */
-export function scanContent(filePath: string, content: string): Finding[] {
+/**
+ * Matches inline suppression comments, e.g.:
+ *   skill-guard-disable-next-line
+ *   skill-guard-disable-next-line rm-rf
+ *   skill-guard-disable-line curl-pipe-bash
+ * The optional trailing token restricts suppression to a single rule id;
+ * with no token, all findings on the targeted line are suppressed.
+ */
+const DISABLE_LINE_RE = /skill-guard-disable-line(?:\s+([a-z0-9]+(?:-[a-z0-9]+)*))?/i;
+const DISABLE_NEXT_LINE_RE = /skill-guard-disable-next-line(?:\s+([a-z0-9]+(?:-[a-z0-9]+)*))?/i;
+
+/** Whether a finding on `line` (1-based) is suppressed by an inline comment. */
+function isSuppressed(lines: string[], lineIndex: number, ruleId: string): boolean {
+  const ownMatch = DISABLE_LINE_RE.exec(lines[lineIndex]);
+  if (ownMatch && (!ownMatch[1] || ownMatch[1] === ruleId)) return true;
+
+  const prevMatch = lineIndex > 0 ? DISABLE_NEXT_LINE_RE.exec(lines[lineIndex - 1]) : null;
+  if (prevMatch && (!prevMatch[1] || prevMatch[1] === ruleId)) return true;
+
+  return false;
+}
+
+/**
+ * Run all rules against a single file's content.
+ *
+ * @param ignoreRules Rule ids to skip entirely, e.g. from `--ignore-rule` or a config file.
+ */
+export function scanContent(
+  filePath: string,
+  content: string,
+  ignoreRules: string[] = [],
+): Finding[] {
   const findings: Finding[] = [];
   const lines = content.split(/\r?\n/);
+  const activeRules = ignoreRules.length
+    ? rules.filter((r) => !ignoreRules.includes(r.id))
+    : rules;
 
   // Line-by-line rules: most rules, scoped to a single line.
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     if (line.length === 0) continue;
 
-    for (const rule of rules) {
+    for (const rule of activeRules) {
       if (rule.multiline) continue;
       const m = rule.pattern.exec(line);
-      if (m) {
+      if (m && !isSuppressed(lines, i, rule.id)) {
         findings.push(makeFinding(rule, filePath, i + 1, m[0]));
       }
     }
   }
 
   // Whole-content rules: patterns that may span multiple lines.
-  for (const rule of rules) {
+  for (const rule of activeRules) {
     if (!rule.multiline) continue;
     const m = rule.pattern.exec(content);
     if (m) {
       const line = content.slice(0, m.index).split(/\r?\n/).length;
+      if (isSuppressed(lines, line - 1, rule.id)) continue;
       // Collapse internal whitespace so a multi-line match displays on one line.
       findings.push(makeFinding(rule, filePath, line, m[0].replace(/\s+/g, " ")));
     }
@@ -122,11 +159,20 @@ function makeFinding(
   };
 }
 
+/** Options that narrow down what a scan reports. */
+export interface ScanOptions {
+  /** Rule ids to skip entirely. */
+  ignoreRules?: string[];
+  /** Extra glob patterns (relative to the scanned root) to exclude. */
+  ignorePaths?: string[];
+}
+
 /**
  * Scan a path (file or directory) and return aggregated results.
  */
-export async function scan(target: string): Promise<ScanResult> {
-  const files = await findFiles(target);
+export async function scan(target: string, options: ScanOptions = {}): Promise<ScanResult> {
+  const { ignoreRules = [], ignorePaths = [] } = options;
+  const files = await findFiles(target, ignorePaths);
   const findings: Finding[] = [];
 
   for (const file of files) {
@@ -137,7 +183,7 @@ export async function scan(target: string): Promise<ScanResult> {
       // Unreadable or binary file — skip it.
       continue;
     }
-    findings.push(...scanContent(file, content));
+    findings.push(...scanContent(file, content, ignoreRules));
   }
 
   findings.sort((a, b) => (a.file === b.file ? a.line - b.line : a.file < b.file ? -1 : 1));
@@ -165,10 +211,10 @@ const SEVERITY_RANK: Record<Severity, number> = {
 /**
  * Scan multiple paths and merge the results into a single ScanResult.
  */
-export async function scanMany(targets: string[]): Promise<ScanResult> {
-  if (targets.length === 1) return scan(targets[0]);
+export async function scanMany(targets: string[], options: ScanOptions = {}): Promise<ScanResult> {
+  if (targets.length === 1) return scan(targets[0], options);
 
-  const results = await Promise.all(targets.map((t) => scan(t)));
+  const results = await Promise.all(targets.map((t) => scan(t, options)));
 
   const findings = results.flatMap((r) => r.findings);
   findings.sort((a, b) => (a.file === b.file ? a.line - b.line : a.file < b.file ? -1 : 1));

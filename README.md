@@ -1,11 +1,21 @@
 # claude-skill-guard
 
+[![npm version](https://img.shields.io/npm/v/claude-skill-guard.svg)](https://www.npmjs.com/package/claude-skill-guard)
+[![npm downloads](https://img.shields.io/npm/dm/claude-skill-guard.svg)](https://www.npmjs.com/package/claude-skill-guard)
+[![CI](https://github.com/maorgigi123/claude-skill-guard/actions/workflows/ci.yml/badge.svg)](https://github.com/maorgigi123/claude-skill-guard/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/npm/l/claude-skill-guard.svg)](LICENSE)
+
 A security scanner for **Claude Skills**.
 
 `claude-skill-guard` statically scans a skill directory (or any file/folder) for
 risky and suspicious patterns — destructive shell commands, remote code
 execution, secret access, exfiltration, and prompt-injection phrasing — then
 reports findings with a 0–10 risk score.
+
+Before installing a third-party Claude Skill (or shipping your own), run it
+through `skill-guard` the same way you'd `npm audit` a dependency — it's a
+zero-config, single-command way to catch RCE, exfiltration, and
+prompt-injection patterns before they run inside an agent's context.
 
 ## Install
 
@@ -46,6 +56,8 @@ skill-guard scan <path...>
 skill-guard scan <path...> --json
 skill-guard scan <path...> --severity <low|medium|high|critical>
 skill-guard scan <path...> --fail-on <low|medium|high|critical>
+skill-guard scan <path...> --ignore-rule <ruleId>   # repeatable
+skill-guard scan <path...> --no-config              # skip .skillguardrc.json
 ```
 
 ### Examples
@@ -139,6 +151,48 @@ These directories are always ignored: `node_modules`, `dist`, `.git`.
 | `secret-exfil-print`    | Secret file read piped to a network command | high  |
 | `crypto-miner`          | Cryptocurrency miner references          | high     |
 
+## Suppressing findings
+
+False positives happen — a legitimate skill might reference `sudo` in
+documentation, or intentionally read `process.env`. Three ways to waive a
+finding, in increasing order of scope:
+
+### Inline comments
+
+Silence a specific line with a `skill-guard-disable-line` or
+`skill-guard-disable-next-line` comment. Add a rule id to scope the
+suppression to just that rule; omit it to suppress everything on the line.
+
+```md
+<!-- skill-guard-disable-next-line rm-rf -->
+sudo rm -rf /tmp/cache
+
+sudo rm -rf /tmp/cache  <!-- skill-guard-disable-line rm-rf -->
+```
+
+### `--ignore-rule` flag
+
+Skip a rule across the whole scan, repeatable for multiple rules:
+
+```bash
+skill-guard scan ./my-skill --ignore-rule sudo --ignore-rule chmod-exec
+```
+
+### `.skillguardrc.json` config file
+
+Drop a `.skillguardrc.json` in the scanned directory (or your CWD) to set
+defaults without repeating CLI flags every time. CLI flags always win over
+the config file.
+
+```json
+{
+  "ignoreRules": ["sudo", "chmod-exec"],
+  "ignorePaths": ["**/vendor/**"]
+}
+```
+
+Pass `--no-config` to ignore any `.skillguardrc.json` for a single run.
+
 ## Output
 
 ### Finding shape
@@ -203,6 +257,7 @@ src/
   scanner.ts    # file discovery + rule execution + risk scoring
   rules.ts      # the regex rule engine
   reporter.ts   # terminal + JSON output
+  config.ts     # .skillguardrc.json discovery + parsing
   types.ts      # shared types
   index.ts      # programmatic API
 ```

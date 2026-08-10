@@ -14,5 +14,7 @@ export {
   filterBySeverity,
   SCANNED_EXTENSIONS,
   IGNORED_DIRS,
+  ScanOptions,
 } from "./scanner";
 export { renderReport, toJson } from "./reporter";
+export { loadConfig, SkillGuardConfig } from "./config";

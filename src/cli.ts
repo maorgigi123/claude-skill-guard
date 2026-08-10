@@ -8,6 +8,7 @@ import path from "path";
 import { Command } from "commander";
 import { scanMany, filterBySeverity, countBySeverity, computeRiskScore } from "./scanner";
 import { renderReport, toJson } from "./reporter";
+import { loadConfig } from "./config";
 import { Severity } from "./types";
 
 const SEVERITIES: Severity[] = ["low", "medium", "high", "critical"];
@@ -62,48 +63,73 @@ program
     "--severity <severity>",
     "only report findings at or above this severity (low|medium|high|critical)",
   )
-  .action(async (targets: string[], options: { json?: boolean; failOn: string; severity?: string }) => {
-    try {
-      if (!isSeverity(options.failOn)) {
-        throw new Error(
-          `invalid --fail-on value "${options.failOn}" (expected one of: ${SEVERITIES.join(", ")})`,
+  .option(
+    "--ignore-rule <ruleId>",
+    "skip a detection rule by id (repeatable)",
+    (value: string, previous: string[]) => previous.concat([value]),
+    [] as string[],
+  )
+  .option(
+    "--no-config",
+    "don't auto-load a .skillguardrc.json config file",
+  )
+  .action(
+    async (
+      targets: string[],
+      options: {
+        json?: boolean;
+        failOn: string;
+        severity?: string;
+        ignoreRule: string[];
+        config: boolean;
+      },
+    ) => {
+      try {
+        if (!isSeverity(options.failOn)) {
+          throw new Error(
+            `invalid --fail-on value "${options.failOn}" (expected one of: ${SEVERITIES.join(", ")})`,
+          );
+        }
+        if (options.severity !== undefined && !isSeverity(options.severity)) {
+          throw new Error(
+            `invalid --severity value "${options.severity}" (expected one of: ${SEVERITIES.join(", ")})`,
+          );
+        }
+
+        const fileConfig = options.config
+          ? loadConfig(targets.length === 1 ? targets[0] : undefined)
+          : {};
+        const ignoreRules = [...(fileConfig.ignoreRules ?? []), ...options.ignoreRule];
+        const ignorePaths = fileConfig.ignorePaths ?? [];
+
+        let result = await scanMany(targets, { ignoreRules, ignorePaths });
+
+        if (options.severity !== undefined) {
+          const findings = filterBySeverity(result.findings, options.severity);
+          result = {
+            ...result,
+            findings,
+            counts: countBySeverity(findings),
+            riskScore: computeRiskScore(countBySeverity(findings)),
+          };
+        }
+
+        const output = options.json ? toJson(result) : renderReport(result);
+        await writeStdout(output + "\n");
+
+        // Exit non-zero when any finding meets or exceeds the --fail-on threshold.
+        const failThreshold = SEVERITIES.indexOf(options.failOn);
+        const worstFound = SEVERITIES.reduce(
+          (worst, sev, i) => (result.counts[sev] > 0 ? Math.max(worst, i) : worst),
+          -1,
         );
+        process.exit(worstFound >= failThreshold ? 1 : 0);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        process.stderr.write(`skill-guard: error: ${message}\n`);
+        process.exit(2);
       }
-      if (options.severity !== undefined && !isSeverity(options.severity)) {
-        throw new Error(
-          `invalid --severity value "${options.severity}" (expected one of: ${SEVERITIES.join(", ")})`,
-        );
-      }
-
-      let result = await scanMany(targets);
-
-      if (options.severity !== undefined) {
-        const findings = filterBySeverity(result.findings, options.severity);
-        result = {
-          ...result,
-          findings,
-          counts: countBySeverity(findings),
-          riskScore: computeRiskScore(countBySeverity(findings)),
-        };
-      }
-
-      const output = options.json
-        ? toJson(result)
-        : renderReport(result);
-      await writeStdout(output + "\n");
-
-      // Exit non-zero when any finding meets or exceeds the --fail-on threshold.
-      const failThreshold = SEVERITIES.indexOf(options.failOn);
-      const worstFound = SEVERITIES.reduce(
-        (worst, sev, i) => (result.counts[sev] > 0 ? Math.max(worst, i) : worst),
-        -1,
-      );
-      process.exit(worstFound >= failThreshold ? 1 : 0);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      process.stderr.write(`skill-guard: error: ${message}\n`);
-      process.exit(2);
-    }
-  });
+    },
+  );
 
 program.parseAsync(process.argv);

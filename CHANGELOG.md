@@ -4,6 +4,30 @@ All notable changes to this project are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [1.1.5] - 2026-08-10
+
+### Added
+
+- Inline suppression comments: `skill-guard-disable-line` and
+  `skill-guard-disable-next-line`, each optionally scoped to a single rule
+  id (e.g. `skill-guard-disable-next-line rm-rf`), for waiving individual
+  findings without editing source.
+- `--ignore-rule <ruleId>` CLI flag (repeatable) to skip a detection rule
+  entirely.
+- Optional `.skillguardrc.json` config file, auto-discovered in the scanned
+  directory (or CWD), supporting `ignoreRules` and `ignorePaths`. CLI flags
+  always take precedence. Disable auto-loading with `--no-config`.
+- `SECURITY.md` describing how to report a vulnerability in the tool.
+- Expanded npm keywords for discoverability (`mcp`, `ai-security`,
+  `llm-security`, `prompt-injection`, `sast`, `agent-security`, `anthropic`,
+  `claude-code`).
+- README badges (npm version, downloads, CI status, license).
+
+## [1.1.1] - [1.1.4]
+
+Republished under new version numbers to work around npm registry version
+conflicts; no functional changes beyond 1.1.0.
+
 ## [1.1.0] - 2026-08-08
 
 ### Added
